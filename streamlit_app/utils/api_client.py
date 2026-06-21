@@ -2,11 +2,12 @@
 HTTP client for communicating with the FastAPI backend.
 Handles JWT token attachment and error formatting.
 """
+import os
 import requests
 from typing import Optional
 
 
-API_BASE_URL = "http://localhost:8000"
+API_BASE_URL = os.getenv("API_BASE_URL", "http://localhost:8000")
 
 
 class APIClient:
