@@ -228,6 +228,9 @@ async def chat_query(
 
     # ── Step 4: Output Guardrails ─────────────────────────────
     answer = result["answer"]
+    if "guardrail_flags" in result:
+        guardrail_flags.extend(result["guardrail_flags"])
+
     if settings.enable_pii_filter:
         output_result = filter_output(answer)
         answer = output_result.filtered_text

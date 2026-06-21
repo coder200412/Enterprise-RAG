@@ -86,75 +86,108 @@ if st.session_state.current_session_id is None and sessions:
         st.session_state.chat_messages = []
     st.rerun()
 
-st.markdown("## 💬 Document Chat")
-st.markdown("Ask questions about company documents. Your access level determines what information you can see.")
-st.markdown("---")
+# Show preview sidebar if active
+preview_active = "preview_data" in st.session_state and st.session_state.preview_data is not None
 
-# Render active session messages
-if st.session_state.chat_messages:
-    for msg in st.session_state.chat_messages:
-        render_message(
-            role=msg["role"],
-            content=msg["content"],
-            sources=msg.get("sources"),
-            flags=msg.get("flags"),
-        )
+if preview_active:
+    col_chat, col_preview = st.columns([2, 1])
 else:
-    st.info("Start a conversation by typing your question below.")
+    col_chat, col_preview = st.columns([1, 0.01])
 
-# Chat input
-if prompt := st.chat_input("Ask a question about company documents..."):
-    # If no session active, auto-create one first
-    if st.session_state.current_session_id is None:
-        try:
-            new_sess = client.create_session()
-            st.session_state.current_session_id = new_sess["session_id"]
-        except Exception as e:
-            st.error(f"Failed to create chat session: {e}")
-            st.stop()
+with col_chat:
+    st.markdown("## 💬 Document Chat")
+    st.markdown("Ask questions about company documents. Your access level determines what information you can see.")
+    st.markdown("---")
 
-    # Display user message immediately
-    st.session_state.chat_messages.append({"role": "user", "content": prompt})
-    render_message("user", prompt)
+    # Render active session messages
+    if st.session_state.chat_messages:
+        for msg in st.session_state.chat_messages:
+            render_message(
+                role=msg["role"],
+                content=msg["content"],
+                sources=msg.get("sources"),
+                flags=msg.get("flags"),
+            )
+    else:
+        st.info("Start a conversation by typing your question below.")
 
-    # Query the RAG API
-    with st.chat_message("assistant", avatar="🤖"):
-        with st.spinner("Searching authorized documents..."):
+    # Chat input
+    if prompt := st.chat_input("Ask a question about company documents..."):
+        # If no session active, auto-create one first
+        if st.session_state.current_session_id is None:
             try:
-                result = client.query(prompt, session_id=st.session_state.current_session_id)
-
-                answer = result.get("answer", "No response received.")
-                sources = result.get("sources", [])
-                flags = result.get("guardrail_flags", [])
-
-                # Display the answer
-                st.markdown(answer)
-
-                # Show sources
-                if sources:
-                    with st.expander("📄 Sources", expanded=False):
-                        for src in sources:
-                            doc_name = src.get("document", "Unknown")
-                            page = src.get("page", "")
-                            page_text = f" — Page {page}" if page else ""
-                            st.markdown(f"• **{doc_name}**{page_text}")
-
-                # Show guardrail flags
-                if flags:
-                    for flag in flags:
-                        st.warning(f"🛡️ {flag}", icon="⚠️")
-
-                # Save to session messages
-                st.session_state.chat_messages.append({
-                    "role": "assistant",
-                    "content": answer,
-                    "sources": sources,
-                    "flags": flags,
-                })
-                # Trigger a rerun to ensure sidebar updates session title
-                st.rerun()
-
+                new_sess = client.create_session()
+                st.session_state.current_session_id = new_sess["session_id"]
             except Exception as e:
-                error_msg = f"Error: {str(e)}"
-                st.error(error_msg)
-                st.session_state.chat_messages.append({"role": "assistant", "content": error_msg})
+                st.error(f"Failed to create chat session: {e}")
+                st.stop()
+
+        # Display user message immediately
+        st.session_state.chat_messages.append({"role": "user", "content": prompt})
+        render_message("user", prompt)
+
+        # Query the RAG API
+        with st.chat_message("assistant", avatar="🤖"):
+            with st.spinner("Searching authorized documents..."):
+                try:
+                    result = client.query(prompt, session_id=st.session_state.current_session_id)
+
+                    answer = result.get("answer", "No response received.")
+                    sources = result.get("sources", [])
+                    flags = result.get("guardrail_flags", [])
+
+                    # Display the answer
+                    st.markdown(answer)
+
+                    # Show sources
+                    if sources:
+                        with st.expander("📄 Sources", expanded=False):
+                            for src in sources:
+                                doc_name = src.get("document", "Unknown")
+                                page = src.get("page", "")
+                                page_text = f" — Page {page}" if page else ""
+                                st.markdown(f"• **{doc_name}**{page_text}")
+
+                    # Show guardrail flags
+                    if flags:
+                        for flag in flags:
+                            st.warning(f"🛡️ {flag}", icon="⚠️")
+
+                    # Save to session messages
+                    st.session_state.chat_messages.append({
+                        "role": "assistant",
+                        "content": answer,
+                        "sources": sources,
+                        "flags": flags,
+                    })
+                    st.rerun()
+
+                except Exception as e:
+                    error_msg = f"Error: {str(e)}"
+                    st.error(error_msg)
+                    st.session_state.chat_messages.append({"role": "assistant", "content": error_msg})
+
+if preview_active:
+    with col_preview:
+        st.markdown("### 📄 Citation Preview")
+        preview_doc = st.session_state.preview_data["document"]
+        preview_page = st.session_state.preview_data["page"]
+        
+        st.markdown(f"**Document:** `{preview_doc}`")
+        if preview_page:
+            st.markdown(f"**Page:** `{preview_page}`")
+            
+        if st.button("Close Preview [x]", use_container_width=True):
+            st.session_state.preview_data = None
+            st.rerun()
+            
+        st.markdown("---")
+        
+        # Load citation page content from API
+        with st.spinner("Loading citation content..."):
+            try:
+                preview_result = client.get_document_page_preview(preview_doc, preview_page or 1)
+                content = preview_result.get("content", "No content found.")
+                st.info(content)
+            except Exception as e:
+                st.error(f"Could not load citation content: {e}")

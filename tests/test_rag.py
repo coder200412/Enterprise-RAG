@@ -8,6 +8,13 @@ from langchain_core.documents import Document as LCDocument
 from app.rag.chain import format_docs, query_rag, _response_cache, _cache_key, _cache_put
 
 
+@pytest.fixture(autouse=True)
+def disable_hyde_and_self_rag(monkeypatch):
+    from app.config import settings
+    monkeypatch.setattr(settings, "enable_hyde", False)
+    monkeypatch.setattr(settings, "enable_self_rag", False)
+
+
 def test_format_docs_empty():
     assert format_docs([]) == "No relevant documents found."
     assert format_docs(None) == "No relevant documents found."

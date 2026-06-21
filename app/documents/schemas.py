@@ -22,6 +22,9 @@ class DocumentResponse(BaseModel):
     chunk_count: int
     status: str
     error_message: str
+    version: int
+    is_active: bool
+    tags: str
 
     class Config:
         from_attributes = True

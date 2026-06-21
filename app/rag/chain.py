@@ -136,12 +136,29 @@ def query_rag(question: str, clearance_level: int, department: str | None = None
         except Exception as e:
             print(f"[!] Query rewrite failed: {e}. Using original question.")
 
-    # ── Step 1: Retrieve once ─────────────────────────────────
+    # ── HyDE Generation ───────────────────────────────────────
+    hyde_query = standalone_question
+    if settings.enable_hyde:
+        try:
+            hyde_prompt = ChatPromptTemplate.from_messages([
+                ("system", "You write a hypothetical passage answering the question to help with document search. Write a brief response based on what the document might say. Respond ONLY with the hypothetical passage. Keep it short."),
+                ("human", "Question: {question}\nHypothetical Passage:")
+            ])
+            llm = get_llm()
+            hyde_chain = hyde_prompt | llm | StrOutputParser()
+            hypothetical_passage = hyde_chain.invoke({"question": standalone_question})
+            if hypothetical_passage and hypothetical_passage.strip():
+                hyde_query = hypothetical_passage.strip()
+                print(f"[*] HyDE generated: '{hyde_query[:100]}...'")
+        except Exception as e:
+            print(f"[!] HyDE generation failed: {e}. Using standalone question.")
+
+    # ── Step 1: Retrieve once using HyDE query ────────────────
     retriever = RBACRetriever(
         clearance_level=clearance_level,
         department=department,
     )
-    retrieved_docs = retriever.invoke(standalone_question)
+    retrieved_docs = retriever.invoke(hyde_query)
 
     # ── Step 2: Format context ────────────────────────────────
     context_str = format_docs(retrieved_docs)
@@ -159,6 +176,25 @@ def query_rag(question: str, clearance_level: int, department: str | None = None
         "context": context_str,
         "question": standalone_question,
     })
+
+    # ── Step 3.5: Self-RAG Hallucination Check ────────────────
+    guardrail_flags = []
+    if settings.enable_self_rag:
+        try:
+            check_prompt = ChatPromptTemplate.from_messages([
+                ("system", "You verify if an answer is fully supported by the provided context. Reply with YES or NO only. Do not explain."),
+                ("human", "Context:\n{context}\n\nAnswer to verify:\n{answer}\n\nIs the answer supported by context? YES/NO:")
+            ])
+            check_chain = check_prompt | llm | StrOutputParser()
+            check_result = check_chain.invoke({
+                "context": context_str,
+                "answer": answer
+            })
+            if "NO" in check_result.upper():
+                guardrail_flags.append("Potential Hallucination Detected")
+                print(f"[!] Hallucination check failed. Result: {check_result}")
+        except Exception as e:
+            print(f"[!] Hallucination check failed: {e}")
 
     # ── Step 4: Extract sources ───────────────────────────────
     sources = []
@@ -178,6 +214,7 @@ def query_rag(question: str, clearance_level: int, department: str | None = None
         "answer": answer,
         "sources": sources,
         "context_found": len(retrieved_docs) > 0,
+        "guardrail_flags": guardrail_flags,
     }
 
     # ── Cache the result ──────────────────────────────────────

@@ -258,10 +258,21 @@ def similarity_search(
     # ── 3. Reciprocal Rank Fusion (RRF) ───────────────────────
     if not dense_docs and not sparse_docs:
         return []
-    elif not sparse_docs:
-        return dense_docs[:top_k]
+
+    def unpack_parents(docs: list[LCDocument]) -> list[LCDocument]:
+        unpacked = []
+        for doc in docs:
+            d = LCDocument(page_content=doc.page_content, metadata=doc.metadata.copy())
+            if "parent_content" in d.metadata:
+                d.metadata["child_content"] = d.page_content
+                d.page_content = d.metadata["parent_content"]
+            unpacked.append(d)
+        return unpacked
+
+    if not sparse_docs:
+        return unpack_parents(dense_docs[:top_k])
     elif not dense_docs:
-        return sparse_docs[:top_k]
+        return unpack_parents(sparse_docs[:top_k])
 
     rrf_scores = {}
     doc_map = {}
@@ -281,7 +292,8 @@ def similarity_search(
 
     # Sort by RRF score descending
     sorted_keys = sorted(rrf_scores.keys(), key=lambda k: rrf_scores[k], reverse=True)
-    return [doc_map[key] for key in sorted_keys[:top_k]]
+    merged_docs = [doc_map[key] for key in sorted_keys[:top_k]]
+    return unpack_parents(merged_docs)
 
 
 def get_collection_stats() -> dict:

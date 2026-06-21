@@ -109,6 +109,14 @@ class APIClient:
         resp = requests.get(f"{self.base_url}/documents/", headers=self._headers())
         return self._handle_response(resp)
 
+    def get_document_page_preview(self, filename: str, page: int) -> dict:
+        resp = requests.get(
+            f"{self.base_url}/documents/preview",
+            params={"filename": filename, "page": page},
+            headers=self._headers(),
+        )
+        return self._handle_response(resp)
+
     def delete_document(self, doc_id: int) -> dict:
         resp = requests.delete(
             f"{self.base_url}/documents/{doc_id}", headers=self._headers()

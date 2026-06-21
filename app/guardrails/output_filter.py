@@ -22,6 +22,12 @@ PII_PATTERNS = [
     (r"\b\d{3}-\d{2}-\d{4}\b", "[SSN REDACTED]", "Social Security Number detected and redacted"),
     # Credit card numbers
     (r"\b(?:\d{4}[-\s]?){3}\d{4}\b", "[CARD REDACTED]", "Credit card number detected and redacted"),
+    # Database connection strings
+    (r"\b[a-zA-Z0-9\+]+://[^:\s]+:[^@\s]+@[^\s]+", "[DB CONNECTION REDACTED]", "Database connection string detected and redacted"),
+    # Codenames
+    (r"(?i)\bProject\s+(?:Mercury|Apollo|Orion|Nova|Falcon|Alpha|Beta)\b", "[CODENAME REDACTED]", "Internal project codename detected and redacted"),
+    # Local server IP addresses
+    (r"\b(?:127\.\d{1,3}\.\d{1,3}\.\d{1,3}|10\.\d{1,3}\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3}|172\.(?:1[6-9]|2\d|3[0-1])\.\d{1,3}\.\d{1,3})\b", "[LOCAL IP REDACTED]", "Local server IP address detected and redacted"),
     # IP addresses
     (r"\b(?:\d{1,3}\.){3}\d{1,3}\b", "[IP REDACTED]", "IP address detected and redacted"),
 ]

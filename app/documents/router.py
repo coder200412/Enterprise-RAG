@@ -40,9 +40,11 @@ def ingest_document_task(
             clearance_level=clearance_level,
             department=department,
         )
+        tags = chunks[0].metadata.get("tags", "") if chunks else ""
         chunk_count = add_documents(chunks)
 
         doc.chunk_count = chunk_count
+        doc.tags = tags
         doc.status = "ready"
         db.commit()
 
@@ -91,6 +93,26 @@ async def upload_document(
             detail=f"Failed to save file: {str(e)}",
         )
 
+    # Look for existing active documents with the same filename
+    existing_docs = (
+        db.query(Document)
+        .filter(Document.filename == file.filename, Document.is_active == True)
+        .all()
+    )
+
+    version = 1
+    if existing_docs:
+        version = max(d.version for d in existing_docs) + 1
+        for old_doc in existing_docs:
+            old_doc.is_active = False
+            # Remove vector chunks of old document version
+            try:
+                delete_document_chunks(old_doc.id)
+            except Exception as e:
+                print(f"[!] Failed to delete old chunks: {e}")
+            db.add(old_doc)
+        db.commit()
+
     # Create document metadata record
     doc = Document(
         filename=file.filename,
@@ -99,6 +121,8 @@ async def upload_document(
         department=department,
         uploaded_by=current_user.id,
         status="processing",
+        version=version,
+        is_active=True,
     )
     db.add(doc)
     db.commit()
@@ -122,12 +146,15 @@ async def list_documents(
     current_user: User = Depends(get_current_user),
 ):
     """
-    List all documents the current user is authorized to see.
+    List all active documents the current user is authorized to see.
     Filters by the user's clearance level.
     """
     docs = (
         db.query(Document)
-        .filter(Document.clearance_level <= current_user.role.clearance_level)
+        .filter(
+            Document.clearance_level <= current_user.role.clearance_level,
+            Document.is_active == True
+        )
         .order_by(Document.uploaded_at.desc())
         .all()
     )
@@ -187,3 +214,55 @@ async def delete_document(
     db.commit()
 
     return {"message": f"Document '{doc.filename}' deleted successfully"}
+
+
+@router.get("/preview")
+async def preview_document_page(
+    filename: str,
+    page: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Retrieve the text content of a specific page in a document by filename.
+    Enforces clearance level checks.
+    """
+    doc = db.query(Document).filter(Document.filename == filename, Document.is_active == True).first()
+    if not doc:
+        doc = db.query(Document).filter(Document.filename == filename).first()
+        
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found")
+        
+    if doc.clearance_level > current_user.role.clearance_level:
+        raise HTTPException(status_code=403, detail="Insufficient clearance")
+        
+    from app.documents.vectorstore import get_vectorstore
+    vs = get_vectorstore()
+    
+    results = vs.get(
+        where={
+            "$and": [
+                {"doc_id": doc.id},
+                {"page": page}
+            ]
+        }
+    )
+    
+    if not results or not results["documents"]:
+        raise HTTPException(status_code=404, detail="Page content not found or not indexed")
+        
+    page_texts = []
+    seen_parent = set()
+    for text, meta in zip(results["documents"], results["metadatas"]):
+        parent = meta.get("parent_content")
+        if parent:
+            if parent not in seen_parent:
+                seen_parent.add(parent)
+                page_texts.append(parent)
+        else:
+            page_texts.append(text)
+            
+    content = "\n\n".join(page_texts)
+    return {"doc_id": doc.id, "filename": filename, "page": page, "content": content}
+

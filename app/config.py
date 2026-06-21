@@ -44,6 +44,11 @@ class Settings(BaseSettings):
     enable_pii_filter: bool = True
     enable_llamaguard: bool = False
 
+    # Advanced Suite Switches
+    enable_hyde: bool = True
+    enable_self_rag: bool = True
+    enable_auto_tagging: bool = True
+
     class Config:
         env_file = ".env"
         extra = "ignore"
