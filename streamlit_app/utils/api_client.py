@@ -18,6 +18,17 @@ import datetime
 from typing import Optional
 
 
+"""
+In-Memory Mock HTTP client for Streamlit deployment.
+Simulates all backend API calls using Streamlit session state.
+This allows the frontend to run stand-alone online for recruiters,
+showcasing all RBAC security levels, guardrail blocks, and audit logs.
+"""
+import streamlit as st
+import datetime
+from typing import Optional
+
+
 # Initialize mock data in session state if not already done
 def init_mock_state():
     if "mock_users" not in st.session_state:
@@ -82,7 +93,7 @@ def init_mock_state():
                 {
                     "role": "assistant",
                     "content": "According to Section 8 of the ISO 27001 Compliance Policy, corporate data must be retained based on its classification level: standard communications are archived for 3 years, while financial logs and security trails are kept for 7 years. You can check the details in [ISO27001_Compliance_Policy.pdf: Page 14].",
-                    "sources": [{"document": "ISO27001_Compliance_Policy.pdf", "page": 14}],
+                    "sources": [{"document": "ISO27001_Compliance_Policy.pdf", "page": 14, "rerank_score": 0.94}],
                     "flags": []
                 }
             ]
@@ -107,6 +118,18 @@ def init_mock_state():
                 "timestamp": "2026-06-29T14:25:00Z",
                 "guardrail_flags": "['RBAC Denial']",
                 "latency_ms": 45
+            }
+        ]
+
+    if "mock_feedbacks" not in st.session_state:
+        st.session_state.mock_feedbacks = [
+            {
+                "id": 1,
+                "timestamp": "2026-06-29T14:30:00Z",
+                "query": "Who is the HR manager?",
+                "answer": "The HR manager is Sarah Connor.",
+                "score": -1,
+                "correction": "Sarah Connor retired in May, the new HR manager is John Miller."
             }
         ]
 
@@ -269,13 +292,51 @@ class APIClient:
         
         q_lower = question.lower()
         guardrail_flags = []
+        sources = []
         
-        # ── 1. Input Guardrails (PII filter simulation) ──────────────────────────
-        pii_keywords = ["social security", "ssn", "passport", "credit card", "my email is", "phone number"]
-        if any(pii in q_lower for pii in pii_keywords):
-            answer = "⚠️ Query blocked: Potential PII leakage detected. The system has intercepted your input to prevent sensitive personal information (SSNs, passports, or payment details) from being sent to the LLM."
-            guardrail_flags.append("PII Leakage Blocked")
-            self._log_audit(username, question, answer[:100], "['PII Blocked']")
+        # ── 1. Input Guardrails (PII filter simulation - Presidio Integration) ──────────
+        pii_keywords = {
+            "ssn": "US_SSN",
+            "social security": "US_SSN",
+            "credit card": "CREDIT_CARD",
+            "passport": "PASSPORT"
+        }
+        
+        detected_entity = None
+        for key, val in pii_keywords.items():
+            if key in q_lower:
+                detected_entity = val
+                break
+                
+        # Simulate active email or phone mapping in input
+        import re
+        has_email = re.search(r"[\w\.-]+@[\w\.-]+\.\w+", question)
+        has_phone = re.search(r"\b\d{3}[-.]?\d{3}[-.]?\d{4}\b", question)
+        
+        if detected_entity or has_email or has_phone:
+            # Anonymization simulation
+            anonymized_query = question
+            pii_type = detected_entity or ("EMAIL_ADDRESS" if has_email else "PHONE_NUMBER")
+            placeholder = f"<{pii_type}_1>"
+            
+            if has_email:
+                anonymized_query = re.sub(r"[\w\.-]+@[\w\.-]+\.\w+", placeholder, anonymized_query)
+            elif has_phone:
+                anonymized_query = re.sub(r"\b\d{3}[-.]?\d{3}[-.]?\d{4}\b", placeholder, anonymized_query)
+            elif detected_entity:
+                # Mock replace words
+                anonymized_query = f"Query scrubbed under Presidio policy: What is standard security for user {placeholder}?"
+            
+            answer = (
+                f"🛡️ **Microsoft Presidio Anonymizer Enabled**\n\n"
+                f"• **Original Query**: `\"{question}\"`\n"
+                f"• **Scrubbed Query (sent to LLM)**: `\"{anonymized_query}\"`\n\n"
+                f"**[LLM Response]**: The corporate policy forbids querying raw personal identifier fields. "
+                f"To protect privacy, the text has been scrubbed. For security clearance inquiries, "
+                f"please contact compliance@company.com."
+            )
+            guardrail_flags.append("PII Scrubbed (Presidio)")
+            self._log_audit(username, question, "Scrubbed PII input via Microsoft Presidio.", "['PII Anonymized']")
             return {
                 "answer": answer,
                 "sources": [],
@@ -296,9 +357,7 @@ class APIClient:
                 "context_found": False
             }
 
-        # ── 3. RBAC Filtering simulation ─────────────────────────────────────────
-        sources = []
-        
+        # ── 3. RBAC Filtering & Search simulation ────────────────────────────────
         # Employee asks about Admin or Manager content
         if "salary" in q_lower or "performance review" in q_lower or "feedback" in q_lower:
             if user_clearance < 3:
@@ -313,7 +372,7 @@ class APIClient:
                 }
             else:
                 answer = "Based on Employee_Performance_Reviews_2025.pdf, executive reviews for 2025 indicate ratings: admin is rated 'Exceeds Expectations', and both manager1 and employee1 have met expectations. Salaries have been aligned with standard Q1 performance criteria."
-                sources.append({"document": "Employee_Performance_Reviews_2025.pdf", "page": 2})
+                sources.append({"document": "Employee_Performance_Reviews_2025.pdf", "page": 2, "rerank_score": 0.96})
 
         elif "budget" in q_lower or "financial" in q_lower or "spending" in q_lower:
             if user_clearance < 2:
@@ -328,15 +387,25 @@ class APIClient:
                 }
             else:
                 answer = "According to Q3_Financial_Projections.xlsx, the department budgets and actuals are as follows:\n- **Finance**: Budget $450k, Spent $412k (saving $38k).\n- **Engineering**: Budget $1.2M, Spent $1.18M (saving $20k).\n- **HR**: Budget $120k, Spent $124.5k (over budget by $4.5k).\n- **Sales & Ops**: Budget $850k, Spent $892k (over budget by $42k).\nThe company net margin target remains at 24.5%."
-                sources.append({"document": "Q3_Financial_Projections.xlsx", "page": 1})
+                sources.append({"document": "Q3_Financial_Projections.xlsx", "page": 1, "rerank_score": 0.95})
 
         elif "retention" in q_lower or "iso" in q_lower or "compliance" in q_lower or "encryption" in q_lower:
             answer = "Section 8 of the ISO 27001 Compliance Policy documents that standard operational data and chat history are retained for 3 years. Financial records, compliance logs, and transactional databases must be kept for 7 years on write-once, read-many (WORM) storage. All backup databases are encrypted under AES-256."
-            sources.append({"document": "ISO27001_Compliance_Policy.pdf", "page": 14})
+            sources.append({"document": "ISO27001_Compliance_Policy.pdf", "page": 14, "rerank_score": 0.94})
             
+        elif "owner" in q_lower or "belongs to" in q_lower or "who manages" in q_lower:
+            # Simulate Graph RAG query for entity relationships
+            answer = (
+                "🕸️ **Graph RAG Relationship Retrieved**:\n"
+                "- `Q3_Financial_Projections.xlsx` (Document) -> BELONGS_TO -> `Finance` (Department)\n"
+                "- `Finance` (Department) -> MANAGED_BY -> `manager1` (User)\n\n"
+                "According to the corporate database graph, the Q3 Financial Projections file is owned by the Finance Department and managed by manager1."
+            )
+            sources.append({"document": "Q3_Financial_Projections.xlsx", "page": 1, "rerank_score": 0.88})
+            guardrail_flags.append("Graph RAG Traversal")
         else:
             answer = f"I've searched your authorized corporate documents. For general compliance, standard data is encrypted. The primary security reference is the ISO 27001 Compliance Policy. If you have specific questions about department budgets or performance, please use terms like 'budget' or 'performance review' (if authorized for your role)."
-            sources.append({"document": "ISO27001_Compliance_Policy.pdf", "page": 1})
+            sources.append({"document": "ISO27001_Compliance_Policy.pdf", "page": 1, "rerank_score": 0.72})
 
         # Save to mock message database
         if session_id and session_id in st.session_state.mock_messages:
@@ -356,6 +425,21 @@ class APIClient:
             "guardrail_flags": guardrail_flags,
             "context_found": len(sources) > 0
         }
+
+    def submit_feedback(self, query: str, answer: str, score: int, correction: str = None) -> dict:
+        new_id = len(st.session_state.mock_feedbacks) + 1
+        st.session_state.mock_feedbacks.insert(0, {
+            "id": new_id,
+            "timestamp": datetime.datetime.now().isoformat(),
+            "query": query,
+            "answer": answer,
+            "score": score,
+            "correction": correction
+        })
+        return {"status": "success"}
+
+    def get_feedbacks(self) -> list:
+        return st.session_state.mock_feedbacks
 
     def _log_audit(self, username: str, query: str, response_summary: str, flags: str):
         new_id = len(st.session_state.mock_audit_logs) + 1
@@ -419,4 +503,6 @@ class APIClient:
             "service": "Mock Enterprise RAG API",
             "vector_store": {"total_chunks": 276, "name": "mock_enterprise_docs"}
         }
+
+
 

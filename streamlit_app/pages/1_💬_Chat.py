@@ -104,13 +104,44 @@ with col_chat:
 
     # Render active session messages
     if st.session_state.chat_messages:
-        for msg in st.session_state.chat_messages:
+        for idx, msg in enumerate(st.session_state.chat_messages):
             render_message(
                 role=msg["role"],
                 content=msg["content"],
                 sources=msg.get("sources"),
                 flags=msg.get("flags"),
             )
+            
+            # Render feedback buttons for assistant messages
+            if msg["role"] == "assistant" and "blocked" not in msg["content"].lower() and "denied" not in msg["content"].lower():
+                col_up, col_down, _ = st.columns([1.5, 1.5, 7])
+                
+                with col_up:
+                    if st.button("👍 Good", key=f"up_{idx}", use_container_width=True):
+                        # Find the preceding user query
+                        user_query = st.session_state.chat_messages[idx-1]["content"] if idx > 0 else "N/A"
+                        client.submit_feedback(user_query, msg["content"], 1)
+                        st.toast("Thank you for your feedback!", icon="👍")
+                        
+                with col_down:
+                    if st.button("👎 Poor", key=f"down_{idx}", use_container_width=True):
+                        st.session_state[f"show_correction_{idx}"] = True
+                        st.rerun()
+                        
+                # Correction input form
+                if st.session_state.get(f"show_correction_{idx}", False):
+                    with st.form(key=f"correction_form_{idx}"):
+                        correction = st.text_area("Suggest a corrected answer for this query:", placeholder="Type what the correct answer should be...")
+                        submit_col, cancel_col = st.columns([2, 8])
+                        with submit_col:
+                            submitted = st.form_submit_button("Submit")
+                        if submitted:
+                            user_query = st.session_state.chat_messages[idx-1]["content"] if idx > 0 else "N/A"
+                            client.submit_feedback(user_query, msg["content"], -1, correction)
+                            st.session_state[f"show_correction_{idx}"] = False
+                            st.toast("Correction recorded!", icon="✅")
+                            st.rerun()
+
     else:
         st.info("Start a conversation by typing your question below.")
 
