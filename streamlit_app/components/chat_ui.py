@@ -4,7 +4,7 @@ Chat UI components for Streamlit.
 import streamlit as st
 
 
-def render_message(role: str, content: str, sources: list = None, flags: list = None):
+def render_message(role: str, content: str, sources: list = None, flags: list = None, msg_idx: int = 0):
     """Render a chat message with optional sources and guardrail flags."""
     import hashlib
     with st.chat_message(role, avatar="🤖" if role == "assistant" else "👤"):
@@ -20,7 +20,7 @@ def render_message(role: str, content: str, sources: list = None, flags: list = 
                     page_text = f" (Page {page})" if page else ""
                     
                     btn_label = f"🔍 {doc_name}{page_text}"
-                    btn_key = f"prev_btn_{content_hash}_{doc_name}_{page}_{idx}"
+                    btn_key = f"prev_btn_{msg_idx}_{content_hash}_{doc_name}_{page}_{idx}"
                     
                     if st.button(btn_label, key=btn_key):
                         st.session_state.preview_data = {"document": doc_name, "page": page}
@@ -37,12 +37,13 @@ def render_chat_history():
     if "messages" not in st.session_state:
         st.session_state.messages = []
 
-    for msg in st.session_state.messages:
+    for msg_idx, msg in enumerate(st.session_state.messages):
         render_message(
             role=msg["role"],
             content=msg["content"],
             sources=msg.get("sources"),
             flags=msg.get("flags"),
+            msg_idx=msg_idx,
         )
 
 

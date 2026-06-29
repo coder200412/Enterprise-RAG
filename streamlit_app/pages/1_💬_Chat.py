@@ -110,6 +110,7 @@ with col_chat:
                 content=msg["content"],
                 sources=msg.get("sources"),
                 flags=msg.get("flags"),
+                msg_idx=idx,
             )
             
             # Render feedback buttons for assistant messages
