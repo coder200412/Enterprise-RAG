@@ -488,6 +488,23 @@ class APIClient:
             del st.session_state.mock_messages[session_id]
         return {"status": "success"}
 
+    def delete_last_message(self, session_id: int) -> dict:
+        session_id = int(session_id)
+        if session_id in st.session_state.mock_messages:
+            messages = st.session_state.mock_messages[session_id]
+            if messages:
+                # Remove last assistant-user pair if applicable, or just the last message
+                last_msg = messages[-1]
+                to_remove = 1
+                if last_msg["role"] == "assistant" and len(messages) > 1:
+                    prev_msg = messages[-2]
+                    if prev_msg["role"] == "user":
+                        to_remove = 2
+                
+                st.session_state.mock_messages[session_id] = messages[:-to_remove]
+                return {"status": "success", "deleted_count": to_remove}
+        return {"status": "success", "deleted_count": 0}
+
     def get_session_messages(self, session_id: int) -> list:
         session_id = int(session_id)
         return st.session_state.mock_messages.get(session_id, [])

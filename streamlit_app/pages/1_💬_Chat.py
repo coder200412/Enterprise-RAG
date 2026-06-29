@@ -80,6 +80,18 @@ if sessions:
 else:
     st.sidebar.caption("No recent conversations.")
 
+# "Delete Last Message" button
+if st.session_state.current_session_id and st.session_state.chat_messages:
+    st.sidebar.markdown("---")
+    if st.sidebar.button("↩️ Delete Last Message", use_container_width=True, help="Removes the last prompt and response from the chat history."):
+        try:
+            client.delete_last_message(st.session_state.current_session_id)
+            st.session_state.chat_messages = client.get_session_messages(st.session_state.current_session_id)
+            st.toast("Deleted last message exchange!", icon="↩️")
+            st.rerun()
+        except Exception as e:
+            st.sidebar.error(f"Error: {e}")
+
 # If no session selected, select the first one or auto-create one
 if st.session_state.current_session_id is None and sessions:
     st.session_state.current_session_id = sessions[0]["session_id"]

@@ -87,6 +87,40 @@ async def delete_session(
     return {"status": "success"}
 
 
+@router.delete("/sessions/{session_id}/messages/last")
+async def delete_last_message(
+    session_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    from app.auth.models import ChatSession
+    session = (
+        db.query(ChatSession)
+        .filter(ChatSession.id == session_id, ChatSession.user_id == current_user.id)
+        .first()
+    )
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    
+    sorted_msgs = sorted(session.messages, key=lambda m: m.id)
+    if not sorted_msgs:
+        return {"status": "success", "deleted_count": 0}
+        
+    to_delete = []
+    last_msg = sorted_msgs[-1]
+    to_delete.append(last_msg)
+    
+    if last_msg.role == "assistant" and len(sorted_msgs) > 1:
+        prev_msg = sorted_msgs[-2]
+        if prev_msg.role == "user":
+            to_delete.append(prev_msg)
+            
+    for msg in to_delete:
+        db.delete(msg)
+    db.commit()
+    return {"status": "success", "deleted_count": len(to_delete)}
+
+
 @router.get("/sessions/{session_id}/messages")
 async def get_session_messages(
     session_id: int,
