@@ -180,7 +180,8 @@ class APIClient:
         return {"status": "success"}
 
     def register_user(self, username: str, email: str, password: str, role: str) -> dict:
-        new_id = max(st.session_state.mock_users.keys()) + 1
+        user_ids = list(st.session_state.mock_users.keys())
+        new_id = max(user_ids) + 1 if user_ids else 1
         clearance_levels = {"employee": 1, "manager": 2, "admin": 3}
         role_info = {
             "name": role,
@@ -220,7 +221,8 @@ class APIClient:
     # ── Document Methods ──────────────────────────────────────
 
     def upload_document(self, file, clearance_level: int, department: str) -> dict:
-        new_id = max([d["id"] for d in st.session_state.mock_documents]) + 1
+        doc_ids = [d["id"] for d in st.session_state.mock_documents]
+        new_id = max(doc_ids) + 1 if doc_ids else 1
         user_info = self.get_me()
         
         new_doc = {
