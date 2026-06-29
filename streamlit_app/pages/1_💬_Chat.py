@@ -110,8 +110,21 @@ else:
     col_chat, col_preview = st.columns([1, 0.01])
 
 with col_chat:
-    st.markdown("## 💬 Document Chat")
-    st.markdown("Ask questions about company documents. Your access level determines what information you can see.")
+    col_title, col_undo = st.columns([3, 1])
+    with col_title:
+        st.markdown("## 💬 Document Chat")
+        st.markdown("Ask questions about company documents. Your access level determines what information you can see.")
+    with col_undo:
+        st.markdown("<div style='height: 15px;'></div>", unsafe_allow_html=True)
+        if st.session_state.current_session_id and st.session_state.chat_messages:
+            if st.button("↩️ Undo Last", use_container_width=True, help="Removes the last prompt and response from the chat history."):
+                try:
+                    client.delete_last_message(st.session_state.current_session_id)
+                    st.session_state.chat_messages = client.get_session_messages(st.session_state.current_session_id)
+                    st.toast("Deleted last message exchange!", icon="↩️")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Error: {e}")
     st.markdown("---")
 
     # Render active session messages
@@ -200,13 +213,8 @@ with col_chat:
                         for flag in flags:
                             st.warning(f"🛡️ {flag}", icon="⚠️")
 
-                    # Save to session messages
-                    st.session_state.chat_messages.append({
-                        "role": "assistant",
-                        "content": answer,
-                        "sources": sources,
-                        "flags": flags,
-                    })
+                    # Reload messages from the client (syncs state and avoids duplicates)
+                    st.session_state.chat_messages = client.get_session_messages(st.session_state.current_session_id)
                     st.rerun()
 
                 except Exception as e:

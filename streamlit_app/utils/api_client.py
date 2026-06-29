@@ -411,8 +411,11 @@ class APIClient:
 
         # Save to mock message database
         if session_id and session_id in st.session_state.mock_messages:
-            st.session_state.mock_messages[session_id].append({"role": "user", "content": question})
-            st.session_state.mock_messages[session_id].append({
+            history = st.session_state.mock_messages[session_id]
+            # Only append user message if it's not already the last one (prevents duplicate appends)
+            if not history or history[-1]["role"] != "user" or history[-1]["content"] != question:
+                history.append({"role": "user", "content": question})
+            history.append({
                 "role": "assistant",
                 "content": answer,
                 "sources": sources,
