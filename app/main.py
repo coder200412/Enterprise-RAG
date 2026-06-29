@@ -20,6 +20,9 @@ async def lifespan(app: FastAPI):
     init_db()
     print("[*] Seeding initial data...")
     seed_initial_data()
+    print("[*] Seeding default documents...")
+    from app.database.seed import seed_documents
+    seed_documents()
     print("[OK] Enterprise RAG API ready!")
     yield
     # Shutdown
