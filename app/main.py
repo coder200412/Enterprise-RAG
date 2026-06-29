@@ -19,10 +19,13 @@ async def lifespan(app: FastAPI):
     print("[*] Initializing database...")
     init_db()
     print("[*] Seeding initial data...")
-    seed_initial_data()
-    print("[*] Seeding default documents...")
-    from app.database.seed import seed_documents
-    seed_documents()
+    did_seed = seed_initial_data()
+    if did_seed:
+        print("[*] Seeding default documents...")
+        from app.database.seed import seed_documents
+        seed_documents()
+    else:
+        print("[*] Database already initialized previously. Skipping default document seed to respect manual changes.")
     print("[OK] Enterprise RAG API ready!")
     yield
     # Shutdown

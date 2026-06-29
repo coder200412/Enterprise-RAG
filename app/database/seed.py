@@ -7,7 +7,7 @@ from app.auth.models import Role, User
 from app.auth.service import hash_password
 
 
-def seed_initial_data():
+def seed_initial_data() -> bool:
     """
     Seed the database with default roles and demo users.
     Skips if data already exists.
@@ -18,7 +18,7 @@ def seed_initial_data():
         existing_roles = db.query(Role).count()
         if existing_roles > 0:
             print("   -> Data already seeded, skipping.")
-            return
+            return False
 
         # ── Seed Roles ────────────────────────────────────────
         roles = [
@@ -72,10 +72,12 @@ def seed_initial_data():
         db.add_all(demo_users)
         db.commit()
         print("   -> Demo users seeded: admin, manager1, employee1")
+        return True
 
     except Exception as e:
         db.rollback()
         print(f"   -> Seed error: {e}")
+        return False
     finally:
         db.close()
 

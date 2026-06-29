@@ -5,6 +5,9 @@ Detects and anonymizes sensitive data (names, emails, phones, locations, SSNs).
 import os
 from typing import Optional
 
+# Workaround for Intel OpenMP library duplicate initialization crash in Anaconda environments
+os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
+
 try:
     from presidio_analyzer import AnalyzerEngine
     from presidio_anonymizer import AnonymizerEngine
