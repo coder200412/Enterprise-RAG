@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 from app.database.session import get_db
 from app.auth.dependencies import get_current_user, require_admin
 from app.auth.models import User, AuditLog
-from app.rag.chain import query_rag
+from app.rag.workflow import run_query
 from app.guardrails.input_filter import check_input
 from app.guardrails.output_filter import filter_output
 from app.guardrails.topic_guard import check_topic
@@ -222,7 +222,7 @@ async def chat_query(
 
     # ── Step 3: RAG Query with RBAC ───────────────────────────
     try:
-        result = query_rag(
+        result = run_query(
             question=request.question,
             clearance_level=current_user.role.clearance_level,
             department=request.department,
