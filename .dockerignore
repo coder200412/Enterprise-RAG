@@ -1,0 +1,14 @@
+.git
+.venv
+venv
+__pycache__
+.pytest_cache
+.env
+.env.*
+!.env.example
+data
+*.py[cod]
+*.db
+*.sqlite
+test_*.py
+iso27001.pdf

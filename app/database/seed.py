@@ -2,6 +2,8 @@
 Seed initial data — roles, admin user, and demo users.
 Only runs if the roles table is empty (first-time setup).
 """
+import os
+
 from app.database.session import SessionLocal
 from app.auth.models import Role, User
 from app.auth.service import hash_password
@@ -19,6 +21,18 @@ def seed_initial_data() -> bool:
         if existing_roles > 0:
             print("   -> Data already seeded, skipping.")
             return False
+
+        production_admin = None
+        if os.getenv("ENV", "").lower() == "production":
+            username = os.getenv("BOOTSTRAP_ADMIN_USERNAME", "").strip()
+            email = os.getenv("BOOTSTRAP_ADMIN_EMAIL", "").strip()
+            password = os.getenv("BOOTSTRAP_ADMIN_PASSWORD", "")
+            if not username or not email or len(password) < 16:
+                raise ValueError(
+                    "Production bootstrap requires BOOTSTRAP_ADMIN_USERNAME, "
+                    "BOOTSTRAP_ADMIN_EMAIL, and a BOOTSTRAP_ADMIN_PASSWORD of at least 16 characters."
+                )
+            production_admin = (username, email, password)
 
         # ── Seed Roles ────────────────────────────────────────
         roles = [
@@ -48,34 +62,44 @@ def seed_initial_data() -> bool:
 
         role_map = {r.name: r.id for r in roles}
 
-        # ── Seed Demo Users ───────────────────────────────────
-        demo_users = [
-            User(
-                username="admin",
-                email="admin@company.com",
-                hashed_password=hash_password("admin123"),
+        if production_admin:
+            username, email, password = production_admin
+            initial_users = [User(
+                username=username,
+                email=email,
+                hashed_password=hash_password(password),
                 role_id=role_map["admin"],
-            ),
-            User(
-                username="manager1",
-                email="manager1@company.com",
-                hashed_password=hash_password("manager123"),
-                role_id=role_map["manager"],
-            ),
-            User(
-                username="employee1",
-                email="employee1@company.com",
-                hashed_password=hash_password("employee123"),
-                role_id=role_map["employee"],
-            ),
-        ]
-        db.add_all(demo_users)
+            )]
+        else:
+            initial_users = [
+                User(
+                    username="admin",
+                    email="admin@company.com",
+                    hashed_password=hash_password("admin123"),
+                    role_id=role_map["admin"],
+                ),
+                User(
+                    username="manager1",
+                    email="manager1@company.com",
+                    hashed_password=hash_password("manager123"),
+                    role_id=role_map["manager"],
+                ),
+                User(
+                    username="employee1",
+                    email="employee1@company.com",
+                    hashed_password=hash_password("employee123"),
+                    role_id=role_map["employee"],
+                ),
+            ]
+        db.add_all(initial_users)
         db.commit()
-        print("   -> Demo users seeded: admin, manager1, employee1")
+        print("   -> Initial users created.")
         return True
 
     except Exception as e:
         db.rollback()
+        if os.getenv("ENV", "").lower() == "production":
+            raise
         print(f"   -> Seed error: {e}")
         return False
     finally:

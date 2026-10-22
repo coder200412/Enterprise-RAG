@@ -20,6 +20,19 @@ class Settings(BaseSettings):
     ollama_llm_model: str = "phi3:mini"
     ollama_embed_model: str = "nomic-embed-text"
 
+    # Cloud model providers remain opt-in so local development keeps using Ollama.
+    llm_provider: str = "ollama"
+    embedding_provider: str = "ollama"
+    oci_region: str = "us-chicago-1"
+    oci_service_endpoint: str | None = None
+    oci_compartment_id: str | None = None
+    oci_auth_type: str = "API_KEY"
+    oci_auth_profile: str = "DEFAULT"
+    oci_auth_file_location: str | None = None
+    oci_chat_model: str = "meta.llama-3.3-70b-instruct"
+    oci_embedding_model: str = "cohere.embed-english-v3.0"
+    cors_allowed_origins: str = "http://localhost:8501"
+
     # Security
     jwt_secret_key: str = "change-this-in-production"
     jwt_algorithm: str = "HS256"
@@ -56,15 +69,25 @@ class Settings(BaseSettings):
 
 settings = Settings()
 
-# Check and secure the JWT secret key
+# Require real secrets in production and generate only a development-only fallback.
 import secrets
-if settings.jwt_secret_key == "change-this-in-production":
-    if os.getenv("ENV") == "production" or os.getenv("PRODUCTION") == "true":
-        raise ValueError("CRITICAL SECURITY ERROR: You must configure a secure JWT_SECRET_KEY in production environment!")
-    else:
-        # Dev fallback: Auto-generate a secure random 256-bit key
-        settings.jwt_secret_key = secrets.token_hex(32)
-        print("[WARNING] Using default JWT secret. Auto-generated a secure temporary key for this session.")
+is_production = os.getenv("ENV", "").lower() == "production" or os.getenv("PRODUCTION", "").lower() == "true"
+placeholder_secrets = {
+    "change-this-in-production",
+    "change-this-to-a-random-secret-key-in-production",
+}
+if is_production and (
+    settings.jwt_secret_key in placeholder_secrets or len(settings.jwt_secret_key) < 32
+):
+    raise ValueError("CRITICAL SECURITY ERROR: Set JWT_SECRET_KEY to a unique random value of at least 32 characters.")
+if is_production and any(
+    marker in settings.database_url.upper()
+    for marker in ("POSTGRES:1234@", "YOUR_PASSWORD", "REPLACE_WITH")
+):
+    raise ValueError("CRITICAL SECURITY ERROR: Set DATABASE_URL to the production database credentials.")
+if not is_production and settings.jwt_secret_key in placeholder_secrets:
+    settings.jwt_secret_key = secrets.token_hex(32)
+    print("[WARNING] Using a temporary development JWT secret for this session.")
 
 # Ensure data directories exist
 os.makedirs(settings.upload_dir, exist_ok=True)

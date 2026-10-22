@@ -139,7 +139,9 @@ with col_chat:
             )
             
             # Render feedback buttons for assistant messages
-            if msg["role"] == "assistant" and "blocked" not in msg["content"].lower() and "denied" not in msg["content"].lower():
+            if (getattr(client, "supports_feedback", True) and msg["role"] == "assistant"
+                    and "blocked" not in msg["content"].lower()
+                    and "denied" not in msg["content"].lower()):
                 col_up, col_down, _ = st.columns([1.5, 1.5, 7])
                 
                 with col_up:

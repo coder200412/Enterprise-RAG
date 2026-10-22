@@ -527,4 +527,124 @@ class APIClient:
         }
 
 
+class HttpAPIClient:
+    """Streamlit client for the authenticated FastAPI backend."""
+
+    supports_feedback = False
+
+    def __init__(self):
+        self.base_url = os.getenv("API_BASE_URL", "http://localhost:8000").rstrip("/")
+        self.token = st.session_state.get("token")
+
+    def set_token(self, token: str):
+        self.token = token
+
+    def _request(self, method: str, path: str, **kwargs):
+        headers = kwargs.pop("headers", {})
+        if self.token:
+            headers["Authorization"] = f"Bearer {self.token}"
+        response = requests.request(
+            method, f"{self.base_url}{path}", headers=headers, timeout=60, **kwargs
+        )
+        try:
+            payload = response.json()
+        except ValueError:
+            payload = {"detail": response.text}
+        if not response.ok:
+            detail = payload.get("detail", payload) if isinstance(payload, dict) else payload
+            raise RuntimeError(f"API request failed ({response.status_code}): {detail}")
+        return payload
+
+    def login(self, username: str, password: str) -> dict:
+        result = self._request("POST", "/auth/login", json={"username": username, "password": password})
+        self.set_token(result["access_token"])
+        return result
+
+    def get_me(self) -> dict:
+        return self._request("GET", "/auth/me")
+
+    def logout(self) -> dict:
+        result = self._request("POST", "/auth/logout") if self.token else {"status": "success"}
+        self.token = None
+        return result
+
+    def register_user(self, username: str, email: str, password: str, role: str) -> dict:
+        return self._request("POST", "/auth/register", json={
+            "username": username, "email": email, "password": password, "role_name": role,
+        })
+
+    def list_users(self) -> list:
+        return self._request("GET", "/auth/users")
+
+    def list_roles(self) -> list:
+        return self._request("GET", "/auth/roles")
+
+    def update_user_role(self, user_id: int, role_name: str) -> dict:
+        return self._request("PUT", f"/auth/users/{int(user_id)}/role", json={"role_name": role_name})
+
+    def upload_document(self, file, clearance_level: int, department: str) -> dict:
+        return self._request(
+            "POST", "/documents/upload",
+            data={"clearance_level": int(clearance_level), "department": department},
+            files={"file": (file.name, file.getvalue())},
+        )
+
+    def list_documents(self) -> dict:
+        return self._request("GET", "/documents/")
+
+    def get_document_page_preview(self, filename: str, page: int) -> dict:
+        from urllib.parse import quote
+        return self._request(
+            "GET", f"/documents/preview/{quote(filename, safe='')}", params={"page": int(page)}
+        )
+
+    def delete_document(self, doc_id: int) -> dict:
+        return self._request("DELETE", f"/documents/{int(doc_id)}")
+
+    def query(self, question: str, department: str = None, session_id: int = None) -> dict:
+        return self._request("POST", "/chat/query", json={
+            "question": question, "department": department, "session_id": session_id,
+        })
+
+    def get_chat_history(self, limit: int = 20) -> list:
+        return self._request("GET", "/chat/history", params={"limit": limit})
+
+    def submit_feedback(self, query: str, answer: str, score: int, correction: str = None) -> dict:
+        raise NotImplementedError("Feedback endpoints are not available in the FastAPI backend yet.")
+
+    def get_feedbacks(self) -> list:
+        return []
+
+    def create_session(self, title: str = "New Chat") -> dict:
+        return self._request("POST", "/chat/sessions", json={"title": title})
+
+    def list_sessions(self) -> list:
+        return self._request("GET", "/chat/sessions")
+
+    def delete_session(self, session_id: int) -> dict:
+        return self._request("DELETE", f"/chat/sessions/{int(session_id)}")
+
+    def delete_last_message(self, session_id: int) -> dict:
+        return self._request("DELETE", f"/chat/sessions/{int(session_id)}/messages/last")
+
+    def get_session_messages(self, session_id: int) -> list:
+        return self._request("GET", f"/chat/sessions/{int(session_id)}/messages")
+
+    def get_admin_audit_logs(self, limit: int = 50) -> list:
+        return self._request("GET", "/chat/admin/audit-logs", params={"limit": limit})
+
+    def health_check(self) -> dict:
+        return self._request("GET", "/health")
+
+
+def create_api_client():
+    """Select the demo mock or the real API client from API_MODE."""
+    mode = os.getenv("API_MODE", "mock").strip().lower()
+    if mode == "mock":
+        return APIClient()
+    if mode == "http":
+        return HttpAPIClient()
+    raise ValueError("API_MODE must be either 'mock' or 'http'.")
+
+
 

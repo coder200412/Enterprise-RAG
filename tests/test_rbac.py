@@ -58,8 +58,8 @@ def test_clearance_level_1_retrieval(setup_rbac_test_docs):
     """
     Employee (level 1) should only see level 1 documents.
     """
-    # Query for something that could match any (holiday/approve/blueprint/company)
-    results = similarity_search("company policy or project details", clearance_level=1, k=5)
+    # Match terms from the level-1 fixture so the test measures access filtering.
+    results = similarity_search("holiday allowance employees days", clearance_level=1, k=5)
     
     assert len(results) > 0
     # All results must be clearance level 1 or lower (none should be 2 or 3)

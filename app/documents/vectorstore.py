@@ -83,14 +83,37 @@ class ConcurrentOllamaEmbeddings(OllamaEmbeddings):
         return result
 
 
-def get_embeddings() -> ConcurrentOllamaEmbeddings:
-    """Get or create the Ollama embedding model instance."""
+def get_embeddings():
+    """Get the configured embedding model; changing providers requires re-indexing."""
     global _embeddings
     if _embeddings is None:
-        _embeddings = ConcurrentOllamaEmbeddings(
-            model=settings.ollama_embed_model,
-            base_url=settings.ollama_base_url,
-        )
+        provider = settings.embedding_provider.strip().lower()
+        if provider == "ollama":
+            _embeddings = ConcurrentOllamaEmbeddings(
+                model=settings.ollama_embed_model,
+                base_url=settings.ollama_base_url,
+            )
+        elif provider == "oci":
+            if not settings.oci_compartment_id:
+                raise ValueError("OCI_COMPARTMENT_ID is required when EMBEDDING_PROVIDER=oci")
+            from langchain_oci import OCIGenAIEmbeddings
+
+            endpoint = settings.oci_service_endpoint or (
+                f"https://inference.generativeai.{settings.oci_region}.oci.oraclecloud.com"
+            )
+            auth_options = {"auth_type": settings.oci_auth_type}
+            if settings.oci_auth_type.upper() == "API_KEY":
+                auth_options["auth_profile"] = settings.oci_auth_profile
+                if settings.oci_auth_file_location:
+                    auth_options["auth_file_location"] = settings.oci_auth_file_location
+            _embeddings = OCIGenAIEmbeddings(
+                model_id=settings.oci_embedding_model,
+                service_endpoint=endpoint,
+                compartment_id=settings.oci_compartment_id,
+                **auth_options,
+            )
+        else:
+            raise ValueError(f"Unsupported EMBEDDING_PROVIDER: {settings.embedding_provider}")
     return _embeddings
 
 

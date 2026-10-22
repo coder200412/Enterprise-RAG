@@ -2,13 +2,14 @@
 Authentication components for Streamlit — login form and session management.
 """
 import streamlit as st
-from streamlit_app.utils.api_client import APIClient
+import os
+from streamlit_app.utils.api_client import create_api_client
 
 
-def get_api_client() -> APIClient:
+def get_api_client():
     """Get or create the API client from session state."""
     if "api_client" not in st.session_state:
-        st.session_state.api_client = APIClient()
+        st.session_state.api_client = create_api_client()
     if "token" in st.session_state and st.session_state.token:
         st.session_state.api_client.set_token(st.session_state.token)
     return st.session_state.api_client
@@ -80,14 +81,15 @@ def render_login_form():
                     st.error(f"Login failed: {str(e)}")
 
         st.markdown("---")
-        st.markdown("""
-        <div style="text-align: center; color: #888; font-size: 0.8rem;">
-            <b>Demo Credentials:</b><br>
-            Admin: admin / admin123<br>
-            Manager: manager1 / manager123<br>
-            Employee: employee1 / employee123
-        </div>
-        """, unsafe_allow_html=True)
+        if os.getenv("API_MODE", "mock").strip().lower() == "mock":
+            st.markdown("""
+            <div style="text-align: center; color: #888; font-size: 0.8rem;">
+                <b>Demo Credentials:</b><br>
+                Admin: admin / admin123<br>
+                Manager: manager1 / manager123<br>
+                Employee: employee1 / employee123
+            </div>
+            """, unsafe_allow_html=True)
 
 
 def logout():

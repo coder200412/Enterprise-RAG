@@ -23,18 +23,47 @@ from app.rag.prompts import SYSTEM_PROMPT, USER_PROMPT
 _llm_instance = None
 
 
-def get_llm() -> ChatOllama:
-    """Get or create a singleton Ollama LLM instance with optimized settings."""
+def get_llm():
+    """Get the configured singleton chat model."""
     global _llm_instance
     if _llm_instance is None:
-        _llm_instance = ChatOllama(
-            model=settings.ollama_llm_model,
-            base_url=settings.ollama_base_url,
-            temperature=0.1,       # Low temperature for factual responses
-            num_ctx=2048,          # Smaller context window = faster processing
-            num_predict=512,       # Cap output length to prevent runaway generation
-        )
+        provider = settings.llm_provider.strip().lower()
+        if provider == "ollama":
+            _llm_instance = ChatOllama(
+                model=settings.ollama_llm_model,
+                base_url=settings.ollama_base_url,
+                temperature=0.1,
+                num_ctx=2048,
+                num_predict=512,
+            )
+        elif provider == "oci":
+            if not settings.oci_compartment_id:
+                raise ValueError("OCI_COMPARTMENT_ID is required when LLM_PROVIDER=oci")
+            from langchain_oci import ChatOCIGenAI
+
+            endpoint = settings.oci_service_endpoint or (
+                f"https://inference.generativeai.{settings.oci_region}.oci.oraclecloud.com"
+            )
+            _llm_instance = ChatOCIGenAI(
+                model_id=settings.oci_chat_model,
+                service_endpoint=endpoint,
+                compartment_id=settings.oci_compartment_id,
+                model_kwargs={"temperature": 0.1, "max_tokens": 512},
+                **_oci_auth_options(),
+            )
+        else:
+            raise ValueError(f"Unsupported LLM_PROVIDER: {settings.llm_provider}")
     return _llm_instance
+
+
+def _oci_auth_options() -> dict:
+    """Build OCI auth options without putting credentials in application code."""
+    options = {"auth_type": settings.oci_auth_type}
+    if settings.oci_auth_type.upper() == "API_KEY":
+        options["auth_profile"] = settings.oci_auth_profile
+        if settings.oci_auth_file_location:
+            options["auth_file_location"] = settings.oci_auth_file_location
+    return options
 
 
 # ── Response cache ───────────────────────────────────────────

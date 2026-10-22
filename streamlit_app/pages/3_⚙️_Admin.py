@@ -221,7 +221,10 @@ with admin_tabs[1]:
 # ── Tab 3: User Feedback Audit ────────────────────────────────
 with admin_tabs[2]:
     st.markdown("### 💬 User Feedback Audit Loop")
-    st.caption("Review human feedback and suggested corrections to align and fine-tune the RAG vector index.")
+    if getattr(client, "supports_feedback", True):
+        st.caption("Review human feedback and suggested corrections to the RAG responses.")
+    else:
+        st.caption("Feedback persistence is not implemented in the live API yet.")
     st.markdown("---")
     
     try:

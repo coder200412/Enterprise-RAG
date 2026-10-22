@@ -2,6 +2,7 @@
 FastAPI application entry point.
 """
 from contextlib import asynccontextmanager
+import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -10,6 +11,7 @@ from app.database.seed import seed_initial_data
 from app.auth.router import router as auth_router
 from app.documents.router import router as documents_router
 from app.rag.router import router as chat_router
+from app.config import settings
 
 
 @asynccontextmanager
@@ -20,7 +22,10 @@ async def lifespan(app: FastAPI):
     init_db()
     print("[*] Seeding initial data...")
     did_seed = seed_initial_data()
-    if did_seed:
+    seed_demo_documents = os.getenv(
+        "SEED_DEMO_DOCUMENTS", "false" if os.getenv("ENV", "").lower() == "production" else "true"
+    ).lower() == "true"
+    if did_seed and seed_demo_documents:
         print("[*] Seeding default documents...")
         from app.database.seed import seed_documents
         seed_documents()
@@ -42,8 +47,8 @@ app = FastAPI(
 # CORS middleware for Streamlit frontend
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
+    allow_origins=[origin.strip() for origin in settings.cors_allowed_origins.split(",") if origin.strip()],
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )

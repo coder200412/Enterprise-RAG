@@ -216,7 +216,7 @@ async def delete_document(
     return {"message": f"Document '{doc.filename}' deleted successfully"}
 
 
-@router.get("/preview")
+@router.get("/preview/{filename}")
 async def preview_document_page(
     filename: str,
     page: int,
